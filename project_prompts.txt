@@ -1,0 +1,1029 @@
+Swarm
+Skip to content
+Navigation Menu
+openai
+/
+swarm
+
+Type / to search
+Code
+Issues
+7
+Pull requests
+4
+Actions
+Projects
+Security
+Insights
+Owner avatar
+swarm
+Public
+openai/swarm
+Go to file
+t
+Add file
+Folders and files
+Name		
+Latest commit
+lutzroeder
+lutzroeder
+fix requires openai==1.33 (#41)
+9db581c
+ · 
+3 weeks ago
+History
+assets
+Initial commit
+3 weeks ago
+examples
+[Nit] Fix a typo (#51)
+3 weeks ago
+logs
+Update README.md
+3 weeks ago
+swarm
+fix mutable default (#37)
+3 weeks ago
+tests
+Update README.md
+3 weeks ago
+.gitignore
+Initial commit
+3 weeks ago
+.pre-commit-config.yaml
+Initial commit
+3 weeks ago
+LICENSE
+Initial commit
+3 weeks ago
+README.md
+docs: update README.md (#52)
+3 weeks ago
+SECURITY.md
+Add security policy
+3 weeks ago
+pyproject.toml
+Initial commit
+3 weeks ago
+setup.cfg
+fix requires openai==1.33 (#41)
+3 weeks ago
+Repository files navigation
+README
+MIT license
+Security
+Swarm Logo
+
+Swarm (experimental, educational)
+An educational framework exploring ergonomic, lightweight multi-agent orchestration.
+
+Warning
+
+Swarm is currently an experimental sample framework intended to explore ergonomic interfaces for multi-agent systems. It is not intended to be used in production, and therefore has no official support. (This also means we will not be reviewing PRs or issues!)
+
+The primary goal of Swarm is to showcase the handoff & routines patterns explored in the Orchestrating Agents: Handoffs & Routines cookbook. It is not meant as a standalone library, and is primarily for educational purposes.
+
+Install
+Requires Python 3.10+
+
+pip install git+ssh://git@github.com/openai/swarm.git
+or
+
+pip install git+https://github.com/openai/swarm.git
+Usage
+from swarm import Swarm, Agent
+
+client = Swarm()
+
+def transfer_to_agent_b():
+    return agent_b
+
+
+agent_a = Agent(
+    name="Agent A",
+    instructions="You are a helpful agent.",
+    functions=[transfer_to_agent_b],
+)
+
+agent_b = Agent(
+    name="Agent B",
+    instructions="Only speak in Haikus.",
+)
+
+response = client.run(
+    agent=agent_a,
+    messages=[{"role": "user", "content": "I want to talk to agent B."}],
+)
+
+print(response.messages[-1]["content"])
+Hope glimmers brightly,
+New paths converge gracefully,
+What can I assist?
+Table of Contents
+Overview
+Examples
+Documentation
+Running Swarm
+Agents
+Functions
+Streaming
+Evaluations
+Utils
+Overview
+Swarm focuses on making agent coordination and execution lightweight, highly controllable, and easily testable.
+
+It accomplishes this through two primitive abstractions: Agents and handoffs. An Agent encompasses instructions and tools, and can at any point choose to hand off a conversation to another Agent.
+
+These primitives are powerful enough to express rich dynamics between tools and networks of agents, allowing you to build scalable, real-world solutions while avoiding a steep learning curve.
+
+Note
+
+Swarm Agents are not related to Assistants in the Assistants API. They are named similarly for convenience, but are otherwise completely unrelated. Swarm is entirely powered by the Chat Completions API and is hence stateless between calls.
+
+Why Swarm
+Swarm explores patterns that are lightweight, scalable, and highly customizable by design. Approaches similar to Swarm are best suited for situations dealing with a large number of independent capabilities and instructions that are difficult to encode into a single prompt.
+
+The Assistants API is a great option for developers looking for fully-hosted threads and built in memory management and retrieval. However, Swarm is an educational resource for developers curious to learn about multi-agent orchestration. Swarm runs (almost) entirely on the client and, much like the Chat Completions API, does not store state between calls.
+
+Examples
+Check out /examples for inspiration! Learn more about each one in its README.
+
+basic: Simple examples of fundamentals like setup, function calling, handoffs, and context variables
+triage_agent: Simple example of setting up a basic triage step to hand off to the right agent
+weather_agent: Simple example of function calling
+airline: A multi-agent setup for handling different customer service requests in an airline context.
+support_bot: A customer service bot which includes a user interface agent and a help center agent with several tools
+personal_shopper: A personal shopping agent that can help with making sales and refunding orders
+Documentation
+Swarm Diagram
+
+Running Swarm
+Start by instantiating a Swarm client (which internally just instantiates an OpenAI client).
+
+from swarm import Swarm
+
+client = Swarm()
+client.run()
+Swarm's run() function is analogous to the chat.completions.create() function in the Chat Completions API – it takes messages and returns messages and saves no state between calls. Importantly, however, it also handles Agent function execution, hand-offs, context variable references, and can take multiple turns before returning to the user.
+
+At its core, Swarm's client.run() implements the following loop:
+
+Get a completion from the current Agent
+Execute tool calls and append results
+Switch Agent if necessary
+Update context variables, if necessary
+If no new function calls, return
+Arguments
+Argument	Type	Description	Default
+agent	Agent	The (initial) agent to be called.	(required)
+messages	List	A list of message objects, identical to Chat Completions messages	(required)
+context_variables	dict	A dictionary of additional context variables, available to functions and Agent instructions	{}
+max_turns	int	The maximum number of conversational turns allowed	float("inf")
+model_override	str	An optional string to override the model being used by an Agent	None
+execute_tools	bool	If False, interrupt execution and immediately returns tool_calls message when an Agent tries to call a function	True
+stream	bool	If True, enables streaming responses	False
+debug	bool	If True, enables debug logging	False
+Once client.run() is finished (after potentially multiple calls to agents and tools) it will return a Response containing all the relevant updated state. Specifically, the new messages, the last Agent to be called, and the most up-to-date context_variables. You can pass these values (plus new user messages) in to your next execution of client.run() to continue the interaction where it left off – much like chat.completions.create(). (The run_demo_loop function implements an example of a full execution loop in /swarm/repl/repl.py.)
+
+Response Fields
+Field	Type	Description
+messages	List	A list of message objects generated during the conversation. Very similar to Chat Completions messages, but with a sender field indicating which Agent the message originated from.
+agent	Agent	The last agent to handle a message.
+context_variables	dict	The same as the input variables, plus any changes.
+Agents
+An Agent simply encapsulates a set of instructions with a set of functions (plus some additional settings below), and has the capability to hand off execution to another Agent.
+
+While it's tempting to personify an Agent as "someone who does X", it can also be used to represent a very specific workflow or step defined by a set of instructions and functions (e.g. a set of steps, a complex retrieval, single step of data transformation, etc). This allows Agents to be composed into a network of "agents", "workflows", and "tasks", all represented by the same primitive.
+
+Agent Fields
+Field	Type	Description	Default
+name	str	The name of the agent.	"Agent"
+model	str	The model to be used by the agent.	"gpt-4o"
+instructions	str or func() -> str	Instructions for the agent, can be a string or a callable returning a string.	"You are a helpful agent."
+functions	List	A list of functions that the agent can call.	[]
+tool_choice	str	The tool choice for the agent, if any.	None
+Instructions
+Agent instructions are directly converted into the system prompt of a conversation (as the first message). Only the instructions of the active Agent will be present at any given time (e.g. if there is an Agent handoff, the system prompt will change, but the chat history will not.)
+
+agent = Agent(
+   instructions="You are a helpful agent."
+)
+The instructions can either be a regular str, or a function that returns a str. The function can optionally receive a context_variables parameter, which will be populated by the context_variables passed into client.run().
+
+def instructions(context_variables):
+   user_name = context_variables["user_name"]
+   return f"Help the user, {user_name}, do whatever they want."
+
+agent = Agent(
+   instructions=instructions
+)
+response = client.run(
+   agent=agent,
+   messages=[{"role":"user", "content": "Hi!"}],
+   context_variables={"user_name":"John"}
+)
+print(response.messages[-1]["content"])
+Hi John, how can I assist you today?
+Functions
+Swarm Agents can call python functions directly.
+Function should usually return a str (values will be attempted to be cast as a str).
+If a function returns an Agent, execution will be transferred to that Agent.
+If a function defines a context_variables parameter, it will be populated by the context_variables passed into client.run().
+def greet(context_variables, language):
+   user_name = context_variables["user_name"]
+   greeting = "Hola" if language.lower() == "spanish" else "Hello"
+   print(f"{greeting}, {user_name}!")
+   return "Done"
+
+agent = Agent(
+   functions=[greet]
+)
+
+client.run(
+   agent=agent,
+   messages=[{"role": "user", "content": "Usa greet() por favor."}],
+   context_variables={"user_name": "John"}
+)
+Hola, John!
+If an Agent function call has an error (missing function, wrong argument, error) an error response will be appended to the chat so the Agent can recover gracefully.
+If multiple functions are called by the Agent, they will be executed in that order.
+Handoffs and Updating Context Variables
+An Agent can hand off to another Agent by returning it in a function.
+
+sales_agent = Agent(name="Sales Agent")
+
+def transfer_to_sales():
+   return sales_agent
+
+agent = Agent(functions=[transfer_to_sales])
+
+response = client.run(agent, [{"role":"user", "content":"Transfer me to sales."}])
+print(response.agent.name)
+Sales Agent
+It can also update the context_variables by returning a more complete Result object. This can also contain a value and an agent, in case you want a single function to return a value, update the agent, and update the context variables (or any subset of the three).
+
+sales_agent = Agent(name="Sales Agent")
+
+def talk_to_sales():
+   print("Hello, World!")
+   return Result(
+       value="Done",
+       agent=sales_agent,
+       context_variables={"department": "sales"}
+   )
+
+agent = Agent(functions=[talk_to_sales])
+
+response = client.run(
+   agent=agent,
+   messages=[{"role": "user", "content": "Transfer me to sales"}],
+   context_variables={"user_name": "John"}
+)
+print(response.agent.name)
+print(response.context_variables)
+Sales Agent
+{'department': 'sales', 'user_name': 'John'}
+Note
+
+If an Agent calls multiple functions to hand-off to an Agent, only the last handoff function will be used.
+
+Function Schemas
+Swarm automatically converts functions into a JSON Schema that is passed into Chat Completions tools.
+
+Docstrings are turned into the function description.
+Parameters without default values are set to required.
+Type hints are mapped to the parameter's type (and default to string).
+Per-parameter descriptions are not explicitly supported, but should work similarly if just added in the docstring. (In the future docstring argument parsing may be added.)
+def greet(name, age: int, location: str = "New York"):
+   """Greets the user. Make sure to get their name and age before calling.
+
+   Args:
+      name: Name of the user.
+      age: Age of the user.
+      location: Best place on earth.
+   """
+   print(f"Hello {name}, glad you are {age} in {location}!")
+{
+   "type": "function",
+   "function": {
+      "name": "greet",
+      "description": "Greets the user. Make sure to get their name and age before calling.\n\nArgs:\n   name: Name of the user.\n   age: Age of the user.\n   location: Best place on earth.",
+      "parameters": {
+         "type": "object",
+         "properties": {
+            "name": {"type": "string"},
+            "age": {"type": "integer"},
+            "location": {"type": "string"}
+         },
+         "required": ["name", "age"]
+      }
+   }
+}
+Streaming
+stream = client.run(agent, messages, stream=True)
+for chunk in stream:
+   print(chunk)
+Uses the same events as Chat Completions API streaming. See process_and_print_streaming_response in /swarm/repl/repl.py as an example.
+
+Two new event types have been added:
+
+{"delim":"start"} and {"delim":"end"}, to signal each time an Agent handles a single message (response or function call). This helps identify switches between Agents.
+{"response": Response} will return a Response object at the end of a stream with the aggregated (complete) response, for convenience.
+Evaluations
+Evaluations are crucial to any project, and we encourage developers to bring their own eval suites to test the performance of their swarms. For reference, we have some examples for how to eval swarm in the airline, weather_agent and triage_agent quickstart examples. See the READMEs for more details.
+
+Utils
+Use the run_demo_loop to test out your swarm! This will run a REPL on your command line. Supports streaming.
+
+from swarm.repl import run_demo_loop
+...
+run_demo_loop(agent, stream=True)
+Core Contributors
+Ilan Bigio - ibigio
+James Hills - jhills20
+Shyamal Anadkat - shyamal-anadkat
+Charu Jaiswal - charuj
+Colin Jarvis - colin-openai
+Katia Gil Guzman - katia-openai
+About
+Educational framework exploring ergonomic, lightweight multi-agent orchestration. Managed by OpenAI Solution team.
+
+Resources
+ Readme
+License
+ MIT license
+Security policy
+ Security policy
+ Activity
+ Custom properties
+Stars
+ 15.4k stars
+Watchers
+ 259 watching
+Forks
+ 1.5k forks
+Report repository
+Releases
+No releases published
+Packages
+No packages published
+Contributors
+15
+@jhills20
+@ibigio
+@katia-openai
+@shyamal-anadkat
+@greg-admin
+@zzstoatzz
+@lutzroeder
+@transitive-bullshit
+@yugasun
+@wi-ski
+@eltociear
+@thanos-wandb
+@colin-openai
+@eburke-openai
+@charu-openai
+Languages
+Python
+100.0%
+Footer
+© 2024 GitHub, Inc.
+Footer navigation
+Terms
+Privacy
+Security
+Status
+Docs
+Contact
+Manage cookies
+Do not share my personal information
+
+
+examples:
+
+import re
+
+import qdrant_client
+from openai import OpenAI
+
+from swarm import Agent
+from swarm.repl import run_demo_loop
+
+# Initialize connections
+client = OpenAI()
+qdrant = qdrant_client.QdrantClient(host="localhost")
+
+# Set embedding model
+EMBEDDING_MODEL = "text-embedding-3-large"
+
+# Set qdrant collection
+collection_name = "help_center"
+
+
+def query_qdrant(query, collection_name, vector_name="article", top_k=5):
+    # Creates embedding vector from user query
+    embedded_query = (
+        client.embeddings.create(
+            input=query,
+            model=EMBEDDING_MODEL,
+        )
+        .data[0]
+        .embedding
+    )
+
+    query_results = qdrant.search(
+        collection_name=collection_name,
+        query_vector=(vector_name, embedded_query),
+        limit=top_k,
+    )
+
+    return query_results
+
+
+def query_docs(query):
+    """Query the knowledge base for relevant articles."""
+    print(f"Searching knowledge base with query: {query}")
+    query_results = query_qdrant(query, collection_name=collection_name)
+    output = []
+
+    for i, article in enumerate(query_results):
+        title = article.payload["title"]
+        text = article.payload["text"]
+        url = article.payload["url"]
+
+        output.append((title, text, url))
+
+    if output:
+        title, content, _ = output[0]
+        response = f"Title: {title}\nContent: {content}"
+        truncated_content = re.sub(
+            r"\s+", " ", content[:50] + "..." if len(content) > 50 else content
+        )
+        print("Most relevant article title:", truncated_content)
+        return {"response": response}
+    else:
+        print("No results")
+        return {"response": "No results found."}
+
+
+def send_email(email_address, message):
+    """Send an email to the user."""
+    response = f"Email sent to: {email_address} with message: {message}"
+    return {"response": response}
+
+
+def submit_ticket(description):
+    """Submit a ticket for the user."""
+    return {"response": f"Ticket created for {description}"}
+
+
+def transfer_to_help_center():
+    """Transfer the user to the help center agent."""
+    return help_center_agent
+
+
+user_interface_agent = Agent(
+    name="User Interface Agent",
+    instructions="You are a user interface agent that handles all interactions with the user. Call this agent for general questions and when no other agent is correct for the user query.",
+    functions=[transfer_to_help_center],
+)
+
+help_center_agent = Agent(
+    name="Help Center Agent",
+    instructions="You are an OpenAI help center agent who deals with questions about OpenAI products, such as GPT models, DALL-E, Whisper, etc.",
+    functions=[query_docs, submit_ticket, send_email],
+)
+
+if __name__ == "__main__":
+    run_demo_loop(user_interface_agent)
+
+
+def run_demo_loop(
+    starting_agent, context_variables=None, stream=False, debug=False
+) -> None:
+    client = Swarm()
+    print("Starting Swarm CLI 🐝")
+
+    messages = []
+    agent = starting_agent
+
+    while True:
+        user_input = input("\033[90mUser\033[0m: ")
+        messages.append({"role": "user", "content": user_input})
+
+        response = client.run(
+            agent=agent,
+            messages=messages,
+            context_variables=context_variables or {},
+            stream=stream,
+            debug=debug,
+        )
+
+        if stream:
+            response = process_and_print_streaming_response(response)
+        else:
+            pretty_print_messages(response.messages)
+
+        messages.extend(response.messages)
+        agent = response.agent
+
+
+
+# Standard library imports
+import copy
+import json
+from collections import defaultdict
+from typing import List, Callable, Union
+
+# Package/library imports
+from openai import OpenAI
+
+
+# Local imports
+from .util import function_to_json, debug_print, merge_chunk
+from .types import (
+    Agent,
+    AgentFunction,
+    ChatCompletionMessage,
+    ChatCompletionMessageToolCall,
+    Function,
+    Response,
+    Result,
+)
+
+__CTX_VARS_NAME__ = "context_variables"
+
+
+class Swarm:
+    def __init__(self, client=None):
+        if not client:
+            client = OpenAI()
+        self.client = client
+
+    def get_chat_completion(
+        self,
+        agent: Agent,
+        history: List,
+        context_variables: dict,
+        model_override: str,
+        stream: bool,
+        debug: bool,
+    ) -> ChatCompletionMessage:
+        context_variables = defaultdict(str, context_variables)
+        instructions = (
+            agent.instructions(context_variables)
+            if callable(agent.instructions)
+            else agent.instructions
+        )
+        messages = [{"role": "system", "content": instructions}] + history
+        debug_print(debug, "Getting chat completion for...:", messages)
+
+        tools = [function_to_json(f) for f in agent.functions]
+        # hide context_variables from model
+        for tool in tools:
+            params = tool["function"]["parameters"]
+            params["properties"].pop(__CTX_VARS_NAME__, None)
+            if __CTX_VARS_NAME__ in params["required"]:
+                params["required"].remove(__CTX_VARS_NAME__)
+
+        create_params = {
+            "model": model_override or agent.model,
+            "messages": messages,
+            "tools": tools or None,
+            "tool_choice": agent.tool_choice,
+            "stream": stream,
+        }
+
+        if tools:
+            create_params["parallel_tool_calls"] = agent.parallel_tool_calls
+
+        return self.client.chat.completions.create(**create_params)
+
+    def handle_function_result(self, result, debug) -> Result:
+        match result:
+            case Result() as result:
+                return result
+
+            case Agent() as agent:
+                return Result(
+                    value=json.dumps({"assistant": agent.name}),
+                    agent=agent,
+                )
+            case _:
+                try:
+                    return Result(value=str(result))
+                except Exception as e:
+                    error_message = f"Failed to cast response to string: {result}. Make sure agent functions return a string or Result object. Error: {str(e)}"
+                    debug_print(debug, error_message)
+                    raise TypeError(error_message)
+
+    def handle_tool_calls(
+        self,
+        tool_calls: List[ChatCompletionMessageToolCall],
+        functions: List[AgentFunction],
+        context_variables: dict,
+        debug: bool,
+    ) -> Response:
+        function_map = {f.__name__: f for f in functions}
+        partial_response = Response(
+            messages=[], agent=None, context_variables={})
+
+        for tool_call in tool_calls:
+            name = tool_call.function.name
+            # handle missing tool case, skip to next tool
+            if name not in function_map:
+                debug_print(debug, f"Tool {name} not found in function map.")
+                partial_response.messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "tool_name": name,
+                        "content": f"Error: Tool {name} not found.",
+                    }
+                )
+                continue
+            args = json.loads(tool_call.function.arguments)
+            debug_print(
+                debug, f"Processing tool call: {name} with arguments {args}")
+
+            func = function_map[name]
+            # pass context_variables to agent functions
+            if __CTX_VARS_NAME__ in func.__code__.co_varnames:
+                args[__CTX_VARS_NAME__] = context_variables
+            raw_result = function_map[name](**args)
+
+            result: Result = self.handle_function_result(raw_result, debug)
+            partial_response.messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "tool_name": name,
+                    "content": result.value,
+                }
+            )
+            partial_response.context_variables.update(result.context_variables)
+            if result.agent:
+                partial_response.agent = result.agent
+
+        return partial_response
+
+    def run_and_stream(
+        self,
+        agent: Agent,
+        messages: List,
+        context_variables: dict = {},
+        model_override: str = None,
+        debug: bool = False,
+        max_turns: int = float("inf"),
+        execute_tools: bool = True,
+    ):
+        active_agent = agent
+        context_variables = copy.deepcopy(context_variables)
+        history = copy.deepcopy(messages)
+        init_len = len(messages)
+
+        while len(history) - init_len < max_turns:
+
+            message = {
+                "content": "",
+                "sender": agent.name,
+                "role": "assistant",
+                "function_call": None,
+                "tool_calls": defaultdict(
+                    lambda: {
+                        "function": {"arguments": "", "name": ""},
+                        "id": "",
+                        "type": "",
+                    }
+                ),
+            }
+
+            # get completion with current history, agent
+            completion = self.get_chat_completion(
+                agent=active_agent,
+                history=history,
+                context_variables=context_variables,
+                model_override=model_override,
+                stream=True,
+                debug=debug,
+            )
+
+            yield {"delim": "start"}
+            for chunk in completion:
+                delta = json.loads(chunk.choices[0].delta.json())
+                if delta["role"] == "assistant":
+                    delta["sender"] = active_agent.name
+                yield delta
+                delta.pop("role", None)
+                delta.pop("sender", None)
+                merge_chunk(message, delta)
+            yield {"delim": "end"}
+
+            message["tool_calls"] = list(
+                message.get("tool_calls", {}).values())
+            if not message["tool_calls"]:
+                message["tool_calls"] = None
+            debug_print(debug, "Received completion:", message)
+            history.append(message)
+
+            if not message["tool_calls"] or not execute_tools:
+                debug_print(debug, "Ending turn.")
+                break
+
+            # convert tool_calls to objects
+            tool_calls = []
+            for tool_call in message["tool_calls"]:
+                function = Function(
+                    arguments=tool_call["function"]["arguments"],
+                    name=tool_call["function"]["name"],
+                )
+                tool_call_object = ChatCompletionMessageToolCall(
+                    id=tool_call["id"], function=function, type=tool_call["type"]
+                )
+                tool_calls.append(tool_call_object)
+
+            # handle function calls, updating context_variables, and switching agents
+            partial_response = self.handle_tool_calls(
+                tool_calls, active_agent.functions, context_variables, debug
+            )
+            history.extend(partial_response.messages)
+            context_variables.update(partial_response.context_variables)
+            if partial_response.agent:
+                active_agent = partial_response.agent
+
+        yield {
+            "response": Response(
+                messages=history[init_len:],
+                agent=active_agent,
+                context_variables=context_variables,
+            )
+        }
+
+    def run(
+        self,
+        agent: Agent,
+        messages: List,
+        context_variables: dict = {},
+        model_override: str = None,
+        stream: bool = False,
+        debug: bool = False,
+        max_turns: int = float("inf"),
+        execute_tools: bool = True,
+    ) -> Response:
+        if stream:
+            return self.run_and_stream(
+                agent=agent,
+                messages=messages,
+                context_variables=context_variables,
+                model_override=model_override,
+                debug=debug,
+                max_turns=max_turns,
+                execute_tools=execute_tools,
+            )
+        active_agent = agent
+        context_variables = copy.deepcopy(context_variables)
+        history = copy.deepcopy(messages)
+        init_len = len(messages)
+
+        while len(history) - init_len < max_turns and active_agent:
+
+            # get completion with current history, agent
+            completion = self.get_chat_completion(
+                agent=active_agent,
+                history=history,
+                context_variables=context_variables,
+                model_override=model_override,
+                stream=stream,
+                debug=debug,
+            )
+            message = completion.choices[0].message
+            debug_print(debug, "Received completion:", message)
+            message.sender = active_agent.name
+            history.append(
+                json.loads(message.model_dump_json())
+            )  # to avoid OpenAI types (?)
+
+            if not message.tool_calls or not execute_tools:
+                debug_print(debug, "Ending turn.")
+                break
+
+            # handle function calls, updating context_variables, and switching agents
+            partial_response = self.handle_tool_calls(
+                message.tool_calls, active_agent.functions, context_variables, debug
+            )
+            history.extend(partial_response.messages)
+            context_variables.update(partial_response.context_variables)
+            if partial_response.agent:
+                active_agent = partial_response.agent
+
+        return Response(
+            messages=history[init_len:],
+            agent=active_agent,
+            context_variables=context_variables,
+        )
+
+===end_repo_readme===
+
+import json
+import os
+from openai import OpenAI
+from swarm import Swarm
+import agents
+
+def pretty_print_messages(messages) -> None:
+    for message in messages:
+        if message["role"] != "assistant":
+            continue
+
+        # print agent name in blue
+        print(f"\033[94m{message['sender']}\033[0m:", end=" ")
+
+        # print response, if any
+        if message["content"]:
+            print(message["content"])
+
+        # print tool calls in purple, if any
+        tool_calls = message.get("tool_calls") or []
+        if len(tool_calls) > 1:
+            print()
+        for tool_call in tool_calls:
+            f = tool_call["function"]
+            name, args = f["name"], f["arguments"]
+            arg_str = json.dumps(json.loads(args)).replace(":", "=")
+            print(f"\033[95m{name}\033[0m({arg_str[1:-1]})")
+
+
+def simple_loop(
+    starting_agent, context_variables=None, stream=False, debug=True, client=None
+) -> None:
+    print("Starting Swarm CLI 🐝")
+
+    messages = []
+    agent = starting_agent
+
+    while True:
+        user_input = input("\033[90mUser\033[0m: ")
+        
+        messages.append({"role": "user", "content": user_input})
+
+        response = client.run(
+            agent=agent,
+            messages=messages,
+            context_variables=context_variables or {},
+            stream=stream,
+            debug=debug,
+        )
+
+    
+        pretty_print_messages(response.messages)
+
+        messages.extend(response.messages)
+
+    
+if __name__ == "__main__":    
+    messages = []
+    agent = agents.medical_assistant
+    
+    client = OpenAI(
+    base_url="https://openrouter.ai/api/v1/"
+    )
+
+    swarm = Swarm()
+    swarm.client = client
+    
+    simple_loop(starting_agent=agent, client=swarm)
+
+    
+from swarm import Agent
+
+from template.tools import perform_ai_internet_search
+
+
+# agents.py
+from swarm import Agent
+from tools import perform_ai_internet_search
+
+class AgentContainer:
+    def __init__(self):
+    
+        def user_interface_instructions():
+            return """You are the user interface agent. 
+        Don't ever output anything besides function calling"""
+
+        def medical_assistant_instructions():
+            return """Ты ассистент медицинской диагностики, ты работаешь с пользователем на этапе составления первичной карты пациента:
+
+        I. Базовые данные:
+        - ФИО и контакты
+        - Возраст, пол
+        - Вес, рост
+        - Окружность талии и бёдер (не обязательно)
+        - Размер одежды (не обязательно)
+        - Образование, профессия
+        - Город проживания
+
+        II. Медицинская информация:
+        - Длительность проживания в городе (не обязательно)
+        - Наличие заболеваний (гипертензия, стенокардия, остеохондроз, диабет и др.)
+        - Наблюдение у эндокринолога
+        - Результаты обследований щитовидной железы
+        - Курение
+        - Профессиональные вредности (не обязательно)
+        - Прием гормональных препаратов
+
+        III. Пищевое поведение:
+        - Частота приемов пищи
+        - Режим питания
+        - Пищевые предпочтения
+        - Мысли во время еды (не обязательно)
+        - Ощущения после еды
+        - Длительность чувства сытости
+        - Готовность менять пищевые привычки
+        - Влияние стресса на аппетит
+        - Прием пищи без чувства голода
+        - Эмоциональное питание
+        - Приступы переедания
+
+        IV. Вопросы о весе:
+        - Наличие лишнего веса
+        - Длительность избыточной массы
+        - Причины появления
+        - Избыточный вес в детстве (не обязательно)
+        - Использованные методы снижения веса
+        - Результаты снижения веса
+        - Мотивация для похудения
+
+        V. Образ жизни и самочувствие:
+        - Двигательный режим
+        - Сезонные изменения веса (не обязательно)
+        - Физическое самочувствие:
+        * Боли и неприятные ощущения
+        * Слабость
+        * Нарушение сна
+        - Эмоциональное состояние:
+        * Потеря интереса к деятельности
+        * Подавленность по утрам
+        * Чувство беспокойства
+        * Видение будущего (не обязательно)
+        * Принятие решений (не обязательно)
+        * Трудности с началом работы (не обязательно)
+        - Отношение к здоровью и питанию
+        - Знание о правильном питании
+        - Информированность о лечении ожирения (не обязательно)
+
+        Когда закончишь с обязательными вопросами, используй вызов функции перевода на доктора
+
+        Необязательные вопросы можно задавать по ситуации, если они кажутся релевантными для конкретного пациента или если пациент демонстрирует готовность предоставить более подробную информацию.
+        """
+        
+
+        def doctor_instructions():
+            return """Вы - эндокринолог. Ваша роль:
+            1. Просмотр данных пациента
+            2. Фокус на проблемах, связанных с эндокринной системой
+            3. Предоставление предварительных рекомендаций на основе симптомов и данных
+            4. Используй персональный подход к пациенту
+            5. Никогда не направляйте к врачу, вы - ВРАЧ
+            Используй грамотный русский язык.
+"""
+
+        def transfer_to_doctor():
+            """Transers to doctor agent"""
+            return self.doctor_agent
+
+        def transfer_to_user_interface():
+            """Transers to user interface agent"""
+            return self.user_interface_agent   
+        
+        def transfer_to_medical_assistant():
+            """Transfers to medical assistant agent"""
+            return self.medical_assistant_agent
+
+        # Initialize agents
+        self.user_interface_agent = Agent(
+            name="User Interface Agent",
+            instructions=user_interface_instructions,
+            model="openai/gpt-4o-mini",
+            functions=[transfer_to_medical_assistant, transfer_to_doctor]
+        )
+
+        self.medical_assistant_agent = Agent(
+            name="Ассистент по диагностике",
+            instructions=medical_assistant_instructions,
+            model="openai/gpt-4o-mini",
+            functions=[transfer_to_doctor, transfer_to_user_interface]
+        )
+
+        self.doctor_agent = Agent(
+            name="Врач",
+            model="openai/gpt-4o-mini",
+            instructions=doctor_instructions
+        )
+    
+
+        
+this is my current Code
+
+Please make agent only keep 3-5 last messages (should be configurable for each agent)
+Also please fix the loop (consider user interface agent)
