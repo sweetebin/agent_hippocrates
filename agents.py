@@ -4,7 +4,9 @@ from tools import perform_ai_internet_search
 
 
 class AgentContainer:
-    def __init__(self, shared_context):
+    def __init__(self, user_id):
+        # Create SharedContext with the provided user_id
+        shared_context = SharedContext(user_id=user_id)
 
         def transfer_to_doctor():
             """Transfers to doctor agent"""
@@ -28,7 +30,6 @@ class AgentContainer:
         self.medical_assistant_agent = Agent(
             name="Ассистент по диагностике",
             instructions="""Ты ассистент медицинской диагностики. Твоя главная задача - последовательно собрать полную информацию о пациенте.
-
 
 
 РАБОЧИЙ ПРОЦЕСС:

@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 import os
+import sys
 import traceback
 from openai import OpenAI
 from swarm import Swarm
@@ -78,12 +79,25 @@ def simple_loop(
         except Exception as e:
             print(f"An error occurred: {e}")
             print("Full traceback:")
+            traceback.print_exc()
                 
 if __name__ == "__main__":    
+    # Get user_id from command line argument or environment variable
+    user_id = 2
+    
+    if len(sys.argv) > 1:
+        user_id = sys.argv[1]
+    
+    if not user_id:
+        user_id = os.environ.get("USER_ID")
+    
+    if not user_id:
+        print("Error: No user_id provided. Use command line argument or set USER_ID environment variable.")
+        sys.exit(1)
 
-    shared_context = SharedContext(user_id="123")
+    shared_context = SharedContext(user_id=user_id)
     messages = []
-    container = agents.AgentContainer(shared_context)
+    container = agents.AgentContainer(user_id)
     agent = container.medical_assistant_agent
      
     client = OpenAI(
@@ -94,6 +108,4 @@ if __name__ == "__main__":
     swarm = Swarm()
     swarm.client = client
     
-     
-
     simple_loop(starting_agent=agent, client=swarm, shared_context=shared_context, debug=True)
