@@ -6,7 +6,7 @@ from tools import perform_ai_internet_search
 class AgentContainer:
     def __init__(self, user_id):
         # Create SharedContext with the provided user_id
-        shared_context = SharedContext(user_id=user_id)
+        self.shared_context = SharedContext(user_id=user_id)
 
         def transfer_to_doctor():
             """Transfers to doctor agent"""
@@ -18,11 +18,11 @@ class AgentContainer:
 
         # Add SharedContext methods as available functions
         shared_context_functions = [
-            shared_context.append_patient_data,
-            shared_context.replace_patient_data,
-            shared_context.update_shared_notes,
-            shared_context.update_last_handoff,
-            shared_context.update_current_agent,
+            self.shared_context.append_patient_data,
+            self.shared_context.replace_patient_data,
+            self.shared_context.update_shared_notes,
+            self.shared_context.update_last_handoff,
+            self.shared_context.update_current_agent,
             transfer_to_doctor,
             transfer_to_medical_assistant
         ]

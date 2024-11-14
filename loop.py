@@ -83,7 +83,7 @@ def simple_loop(
                 
 if __name__ == "__main__":    
     # Get user_id from command line argument or environment variable
-    user_id = 2
+    user_id = None
     
     if len(sys.argv) > 1:
         user_id = sys.argv[1]
