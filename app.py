@@ -39,8 +39,13 @@ def handle_message():
     agent_container = agent_containers[user_id]
     shared_context = agent_container.shared_context
 
-    # Append user message to history
-    shared_context.update_message_history({"role": "user", "content": message})
+    # Normalize message to dictionary if it's a string
+    if isinstance(message, str):
+        message = {"role": "user", "content": message}
+
+    # Check and update message history based on role and content
+    if message.get('role') != 'tool' and message.get('content'):
+        shared_context.update_message_history(message)
     
     # Prepare messages
     messages = shared_context.get_full_message_history()
@@ -61,7 +66,8 @@ def handle_message():
         if response and response.messages:
             # Process response messages
             for msg in response.messages:
-                if msg.get("role") != "tool":
+                # Check role and content before updating
+                if msg.get('role') != 'tool' and msg.get('content'):
                     shared_context.update_message_history(msg)
             
             # Update current agent and handoff time
@@ -74,7 +80,7 @@ def handle_message():
                     "role": msg["role"],
                     "content": msg["content"]
                 }
-                for msg in response.messages if msg["role"] != "tool"
+                for msg in response.messages if msg["role"] != "tool" and msg.get("content")
             ]
             
             return jsonify({'response': assistant_messages}), 200
@@ -150,4 +156,3 @@ def remove_user_messages():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-    
