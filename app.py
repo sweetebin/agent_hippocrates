@@ -21,6 +21,8 @@ client = OpenAI(
 swarm = Swarm()
 swarm.client = client
 
+agent_messages_buffer = 10
+
 @app.route('/message', methods=['POST'])
 def handle_message():
     data = request.get_json()
@@ -51,7 +53,7 @@ def handle_message():
     try:
         response = swarm.run(
             agent=agent_container.medical_assistant_agent,
-            messages=messages,
+            messages=messages[-agent_messages_buffer:],
             stream=False,
             debug=True
         )
@@ -106,5 +108,46 @@ def initialize_agent():
     
     return jsonify({'message': f'Agent initialized for user_id {user_id} with agent {initial_agent}.'}), 200
 
+@app.route('/remove_user_context', methods=['POST'])
+def remove_user_context():
+    data = request.get_json()
+    user_id = data.get('user_id')
+
+    if not user_id:
+        return jsonify({'error': 'user_id is required'}), 400
+
+    with agent_lock:
+        if user_id not in agent_containers:
+            return jsonify({'error': 'No agent found for this user_id'}), 404
+
+    agent_container = agent_containers[user_id]
+    shared_context = agent_container.shared_context
+
+    # Remove patient data using SharedContext method
+    result = shared_context.remove_all_user_context()
+
+    return jsonify(result), 200
+
+@app.route('/remove_user_messages', methods=['POST'])
+def remove_user_messages():
+    data = request.get_json()
+    user_id = data.get('user_id')
+
+    if not user_id:
+        return jsonify({'error': 'user_id is required'}), 400
+
+    with agent_lock:
+        if user_id not in agent_containers:
+            return jsonify({'error': 'No agent found for this user_id'}), 404
+
+    agent_container = agent_containers[user_id]
+    shared_context = agent_container.shared_context
+
+    # Remove user messages using SharedContext method
+    result = shared_context.remove_user_messages()
+
+    return jsonify(result), 200
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+    

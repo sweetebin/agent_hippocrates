@@ -64,6 +64,54 @@ class SharedContext:
             result = cursor.fetchone()
             return result[0] if result else default
     
+    def _delete_context_value(self, key: str):
+        """Delete a context value from the database for the current user."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM user_context WHERE user_id = ? AND key = ?', (self.user_id, key))
+            conn.commit()
+    
+    def remove_all_user_context(self) -> dict:
+        """
+        Removes all entries for the current user from the user_context table.
+        
+        Returns:
+            dict: Confirmation of data removal with status and details.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Delete all entries for the current user from user_context
+            cursor.execute('DELETE FROM user_context WHERE user_id = ?', (self.user_id,))
+            
+            conn.commit()
+        
+        # Reset the instance attribute
+        self.patient_data = ""
+        
+        return {
+            "status": "success",
+            "message": "All user context entries removed",
+            "removed_data": ""
+        }
+    
+    def remove_user_messages(self) -> dict:
+        """
+        Removes all message history for the current user.
+        
+        Returns:
+            dict: Confirmation of message history removal with status and details.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM message_history WHERE user_id = ?', (self.user_id,))
+            conn.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Message history removed for user_id {self.user_id}"
+        }
+    
     def append_patient_data(self, additional_data: str) -> dict:
         """
         Appends new data to the existing patient data for the current user.
