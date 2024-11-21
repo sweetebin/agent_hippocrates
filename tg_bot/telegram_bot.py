@@ -5,6 +5,10 @@ import logging
 from telegram import Update
 from telegram.constants import ChatAction
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
+import base64
+import base64
+from io import BytesIO
+from PIL import Image
 
 # Configure logging correctly
 logging.basicConfig(
@@ -53,6 +57,58 @@ class TelegramAgentBot:
         except Exception as e:
             logger.error(f"Initialization error: {e}")
             await update.message.reply_text("An error occurred while starting the bot.")
+
+    async def handle_photo(self, update: Update, context):
+        """Handle incoming photos"""
+        user_id = str(update.effective_user.id)
+        
+        try:
+            # Get the largest photo (best quality)
+            photo = max(update.message.photo, key=lambda x: x.file_size)
+            
+            # Download the photo
+            photo_file = await context.bot.get_file(photo.file_id)
+            
+            # Get photo as bytes
+            photo_bytes = await photo_file.download_as_bytearray()
+            
+            # Convert to base64
+            img_buffer = BytesIO(photo_bytes)
+            img = Image.open(img_buffer)
+            buffer = BytesIO()
+            img.save(buffer, format="JPEG")
+            base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            
+            # Send processing message
+            processing_message = await update.message.reply_text(
+                "Анализирую изображение..."
+            )
+
+            # Send to server
+            response = requests.post(
+                f'{SERVER_URL}/process_image',
+                json={
+                    'user_id': user_id,
+                    'image': base64_image
+                }
+            )
+
+            if response.status_code == 200:
+                agent_responses = response.json().get('response', [])
+                for resp in agent_responses:
+                    await update.message.reply_text(resp.get('content', 'No response'))
+            else:
+                await update.message.reply_text(
+                    "Извините, не удалось обработать изображение."
+                )
+
+            await processing_message.delete()
+
+        except Exception as e:
+            logger.error(f"Image processing error: {e}")
+            await update.message.reply_text(
+                "Произошла ошибка при обработке изображения."
+            )
 
     async def handle_message(self, update: Update, context):
         """Process incoming messages and send to server"""
@@ -103,6 +159,7 @@ def main():
     # Register handlers
     application.add_handler(CommandHandler("start", bot.start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot.handle_message))
+    application.add_handler(MessageHandler(filters.PHOTO, bot.handle_photo))
 
     # Start the bot
     logging.info("Starting Telegram bot...")

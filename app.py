@@ -6,6 +6,7 @@ from datetime import datetime
 import threading
 import os
 from openai import OpenAI
+import logger
 
 app = Flask(__name__)
 
@@ -22,6 +23,84 @@ swarm = Swarm()
 swarm.client = client
 
 agent_messages_buffer = 10
+
+# In app.py, modify the process_image endpoint:
+
+@app.route('/process_image', methods=['POST'])
+def process_image():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    base64_image = data.get('image')
+
+    if not user_id or not base64_image:
+        return jsonify({'error': 'user_id and image are required'}), 400
+
+    with agent_lock:
+        if user_id not in agent_containers:
+            agent_containers[user_id] = AgentContainer(user_id)
+    
+    agent_container = agent_containers[user_id]
+    
+    
+    # Create message for image processing agent
+    image_message = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image}"
+                    }
+                }
+            ]
+        }
+    ]
+
+    # Get image analysis from Image Processing Agent
+    image_analysis = swarm.run(
+        agent=agent_container.image_processing_agent,
+        messages=image_message,
+        stream=False,
+        debug=True
+    )
+
+    # Forward findings to Medical Assistant
+    if image_analysis and image_analysis.messages:
+        # Extract the analysis
+        analysis_content = image_analysis.messages[-1].get('content', '')
+        cached_messages = agent_container.shared_context.get_full_message_history()
+        # Create message for medical assistant
+        cached_messages.append({
+            "role": "system",
+            "content": f"<Анализ изображения от пользователя>{analysis_content}\n\nУчти данные и запиши, если релевантны, в этом же сообщении продолжи общение с пользователем (либо продолжай опрос либо переводи к врачу)</Анализ изображения от пользователя>"
+        })
+        
+        
+        
+        # Get medical assistant's response
+        response = swarm.run(
+            agent=agent_container.medical_assistant_agent,
+            messages=cached_messages,
+            stream=False,
+            debug=True
+        )
+
+        # Extract response messages, ensuring we only include messages with content
+        response_messages = []
+        if response and response.messages:
+            for msg in response.messages:
+                if msg.get('role') != 'tool' and msg.get('content'):
+                            response_messages.append({
+                                'role': msg.get('role', 'assistant'),
+                                'content': msg.get('content')
+                            })
+        
+        return jsonify({'response': response_messages}), 200
+        
+    return jsonify({'response': [{'role': 'assistant', 'content': 'Не удалось обработать изображение.'}]}), 200
+
+
 
 @app.route('/message', methods=['POST'])
 def handle_message():
