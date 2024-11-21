@@ -124,7 +124,8 @@ def remove_user_context():
 
     with agent_lock:
         if user_id not in agent_containers:
-            return jsonify({'error': 'No agent found for this user_id'}), 404
+            # Treat as success since there's no context to remove
+            return jsonify({'status': 'success', 'message': f"No context to remove for user_id {user_id}"}), 200
 
     agent_container = agent_containers[user_id]
     shared_context = agent_container.shared_context
@@ -133,6 +134,7 @@ def remove_user_context():
     result = shared_context.remove_all_user_context()
 
     return jsonify(result), 200
+
 
 @app.route('/remove_user_messages', methods=['POST'])
 def remove_user_messages():
@@ -144,7 +146,8 @@ def remove_user_messages():
 
     with agent_lock:
         if user_id not in agent_containers:
-            return jsonify({'error': 'No agent found for this user_id'}), 404
+            # Treat as success since there's nothing to remove
+            return jsonify({'status': 'success', 'message': f"No messages to remove for user_id {user_id}"}), 200
 
     agent_container = agent_containers[user_id]
     shared_context = agent_container.shared_context
