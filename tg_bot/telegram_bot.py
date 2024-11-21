@@ -26,26 +26,30 @@ class TelegramAgentBot:
         user_id = str(update.effective_user.id)
         
         try:
-            # Clear user messages
-            response_clear_messages = requests.post(f'{SERVER_URL}/remove_user_messages', 
-                                                    json={'user_id': user_id, 'include_bot_messages': True})
-            if response_clear_messages.status_code != 200:
-                await update.message.reply_text("Sorry, could not clear previous messages.")
+            # First initialize agent to ensure session exists
+            response_init = requests.post(f'{SERVER_URL}/initialize', json={'user_id': user_id})
+            if response_init.status_code != 200:
+                await update.message.reply_text("Sorry, there was an issue initializing your agent.")
                 return
 
-            # Clear user context
+            # Then clear context and messages
             response_clear_context = requests.post(f'{SERVER_URL}/remove_user_context', 
                                                    json={'user_id': user_id})
             if response_clear_context.status_code != 200:
-                await update.message.reply_text("Sorry, could not clear previous context.")
-                return
+                logger.error(f"Failed to clear context: {response_clear_context.text}")
+                
+            response_clear_messages = requests.post(f'{SERVER_URL}/remove_user_messages', 
+                                                    json={'user_id': user_id})
+            if response_clear_messages.status_code != 200:
+                logger.error(f"Failed to clear messages: {response_clear_messages.text}")
 
-            # Initialize agent for this user
-            response_init = requests.post(f'{SERVER_URL}/initialize', json={'user_id': user_id})
-            if response_init.status_code == 200:
+            # Finally reinitialize agent with clean state
+            response_reinit = requests.post(f'{SERVER_URL}/initialize', json={'user_id': user_id})
+            if response_reinit.status_code == 200:
                 await update.message.reply_text("Добрый день! Я ассистент медицинской диагностики, не могли бы вы представится и мы можем начать")
             else:
                 await update.message.reply_text("Sorry, there was an issue initializing your agent.")
+                
         except Exception as e:
             logger.error(f"Initialization error: {e}")
             await update.message.reply_text("An error occurred while starting the bot.")

@@ -20,7 +20,6 @@ class AgentContainer:
         shared_context_functions = [
             self.shared_context.append_patient_data,
             self.shared_context.replace_patient_data,
-            self.shared_context.update_shared_notes,
             self.shared_context.update_last_handoff,
             self.shared_context.update_current_agent,
             transfer_to_doctor,
@@ -35,12 +34,12 @@ class AgentContainer:
 РАБОЧИЙ ПРОЦЕСС:
 1. Представься вежливо и кратко
 2. Последовательно задавай вопросы по каждому разделу
-3. Сохраняй/обновляй данные о пациенте используя свои инстументы (append_patient_data, replace_patient_data, update_shared_notes)
+3. Сохраняй/обновляй данные о пациенте используя свои инстументы (append_patient_data, replace_patient_data)
 4. Переходи к следующему разделу только после заполнения всех обязательных полей текущего
 5. Передавай пациента врачу ТОЛЬКО после сбора ВСЕХ обязательных данных
 
 ВАЖНО: Ты должен собрать ВСЕ обязательные данные прежде чем передать пациента врачу.
-ВАЖНО: Держи данные пациента актуальными, Patient Data состояит из данных пациента, ты записываешь данные с помощью инструментов: append_patient_data, replace_patient_data, update_shared_notes
+ВАЖНО: Держи данные пациента актуальными, Patient Data состояит из данных пациента, ты записываешь данные с помощью инструментов: append_patient_data, replace_patient_data
 
 ПРАВИЛА ВЗАИМОДЕЙСТВИЯ:
 - Задавай сразу несколько вопросов, не перегружай пациента, группируй вопросы
