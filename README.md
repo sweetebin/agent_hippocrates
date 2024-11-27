@@ -57,9 +57,6 @@ The following environment variables are used in the project:
 - `SERVER_URL`: URL of the server (default: http://localhost:5000)
 - `TELEGRAM_BOT_TOKEN`: Token for the Telegram bot
 
-### User Configuration
-- `USER_ID`: User identifier
-
 ### Usage
 
 To run the project, set these environment variables:
@@ -69,4 +66,3 @@ export OPENROUTER_BASE_URL=your_openrouter_base_url
 export OPENROUTER_API_KEY=your_openrouter_api_key
 export SERVER_URL=your_server_url
 export TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-export USER_ID=your_user_id

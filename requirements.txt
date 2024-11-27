@@ -5,3 +5,4 @@ swarm==1.0.0
 dataclasses==0.8
 python-telegram-bot==20.3
 requests==2.31.0
+sqlalchemy
