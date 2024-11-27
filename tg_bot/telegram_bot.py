@@ -60,8 +60,8 @@ class TelegramAgentBot:
         user_id = str(update.effective_user.id)
 
         try:
-            # Collect all photos from the message
-            photos = update.message.photo
+            # Get only the highest quality photo (last in the list)
+            photo = update.message.photo[-1]  # Telegram sorts photos by size, last one is the biggest
             base64_images = []
 
             # Show processing message
@@ -69,19 +69,27 @@ class TelegramAgentBot:
                 "Обрабатываю изображения..."
             )
 
-            # Process each photo
-            for photo in photos:
-                photo_file = await context.bot.get_file(photo.file_id)
-                photo_bytes = await photo_file.download_as_bytearray()
+            # Process the photo
+            photo_file = await context.bot.get_file(photo.file_id)
+            photo_bytes = await photo_file.download_as_bytearray()
 
-                # Convert to base64
-                img_buffer = BytesIO(photo_bytes)
-                img = Image.open(img_buffer)
-                buffer = BytesIO()
-                img.save(buffer, format="JPEG")
-                base64_images.append(base64.b64encode(buffer.getvalue()).decode('utf-8'))
+            # Convert to base64
+            img_buffer = BytesIO(photo_bytes)
+            img = Image.open(img_buffer)
 
-            # Send all images for processing
+            # Optionally, you can add image optimization here
+            # For example, resize if too large
+            max_size = 1024  # Maximum dimension
+            if max(img.size) > max_size:
+                ratio = max_size / max(img.size)
+                new_size = tuple(int(dim * ratio) for dim in img.size)
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+            buffer = BytesIO()
+            img.save(buffer, format="JPEG", quality=85)  # Adjust quality as needed
+            base64_images.append(base64.b64encode(buffer.getvalue()).decode('utf-8'))
+
+            # Send image for processing
             response = requests.post(
                 f'{SERVER_URL}/process_images',
                 json={
@@ -97,7 +105,7 @@ class TelegramAgentBot:
                         await update.message.reply_text(resp['content'])
             else:
                 await update.message.reply_text(
-                    "Извините, не удалось обработать изображения."
+                    "Извините, не удалось обработать изображение."
                 )
 
             await processing_message.delete()
@@ -105,7 +113,7 @@ class TelegramAgentBot:
         except Exception as e:
             logger.error(f"Image processing error: {e}")
             await update.message.reply_text(
-                "Произошла ошибка при обработке изображений."
+                "Произошла ошибка при обработке изображения."
             )
 
     async def handle_message(self, update: Update, context):

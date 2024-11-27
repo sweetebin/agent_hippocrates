@@ -1,15 +1,15 @@
-# app.py
 from db.models import Image, MedicalRecord, Message, Session, User
 from flask import Flask, request, jsonify
 from agents import AgentContainer
 from db.database import DatabaseManager
 from swarm import Swarm
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 import threading
 import os
 from openai import OpenAI
 import logging
 from typing import List, Dict
+import hashlib
 
 logging.basicConfig(
     level=logging.DEBUG,  # Set to DEBUG for more detailed logs
@@ -35,7 +35,6 @@ client = OpenAI(
 swarm = Swarm()
 swarm.client = client
 
-
 MESSAGE_BUFFER_SIZE = 10  # or whatever size you want
 
 def get_agent_container(external_user_id: str) -> AgentContainer:
@@ -57,29 +56,43 @@ def get_agent_container(external_user_id: str) -> AgentContainer:
             logger.error(f"Error in get_agent_container: {str(e)}")
             raise
 
-
 def process_single_image(agent_container: AgentContainer, image_data: str) -> Dict:
     """Process single image and save interpretation"""
-    # Save image to database
-    image_save_result = agent_container.db_accessor_agent.save_image(
-        agent_container.user_context['session_id'],
-        image_data
-    )
+    logger.info("Starting single image processing")
 
-    if "error" in image_save_result:
-        return {"error": "Failed to save image"}
-
-    # Create message for image processing agent
-    image_message = [{
-        "role": "user",
-        "content": [{
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}
-        }]
-    }]
-
-    # Get image analysis
     try:
+        # Save image to database
+        image_save_result = agent_container.db_accessor_agent.save_image(
+            agent_container.user_context['session_id'],
+            image_data
+        )
+
+        if "error" in image_save_result:
+            logger.error(f"Failed to save image: {image_save_result['error']}")
+            return {"error": "Failed to save image"}
+
+        # Create message for image processing agent
+        image_message = [{
+            "role": "user",
+            "content": [{
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}
+            }]
+        }]
+
+        # Get medical history for context
+        medical_history = agent_container.db_accessor_agent.get_medical_history()
+
+        # Add context message before image
+        context_message = {
+            "role": "system",
+            "content": f"Patient Data: {medical_history.get('medical_history', 'No data available')}\n\nPlease analyze the following medical image:"
+        }
+
+        image_message.insert(0, context_message)
+
+        # Get image analysis
+        logger.info("Sending image to processing agent")
         image_analysis = swarm.run(
             agent=agent_container.image_processing_agent,
             messages=image_message,
@@ -90,13 +103,18 @@ def process_single_image(agent_container: AgentContainer, image_data: str) -> Di
         if image_analysis and image_analysis.messages:
             # Save interpretation
             interpretation = image_analysis.messages[-1].get('content', '')
-            agent_container.db_accessor_agent.save_image_interpretation(
+            save_result = agent_container.db_accessor_agent.save_image_interpretation(
                 image_save_result["image_id"],
                 interpretation
             )
+            logger.info(f"Image interpretation saved: {save_result}")
             return {"status": "success", "interpretation": interpretation}
+        else:
+            logger.error("No response from image processing agent")
+            return {"error": "No response from image processing agent"}
+
     except Exception as e:
-        logger.error(f"Error processing image: {str(e)}")
+        logger.error(f"Error processing image: {str(e)}", exc_info=True)
         return {"error": str(e)}
 
 @app.route('/process_images', methods=['POST'])
@@ -105,63 +123,103 @@ def process_images():
     external_user_id = data.get('user_id')
     images = data.get('images', [])  # Expect list of base64 images
 
+    logger.info(f"Received {len(images)} images for user {external_user_id}")
+
     if not external_user_id or not images:
         return jsonify({'error': 'user_id and images are required'}), 400
 
-    agent_container = get_agent_container(external_user_id)
+    try:
+        agent_container = get_agent_container(external_user_id)
 
-    # Save initial response that images are being processed
-    agent_container.db_accessor_agent.save_message(
-        agent_container.user_context['session_id'],
-        "assistant",
-        f"Processing {len(images)} images... Please wait.",
-        visible_to_user=True
-    )
+        # Get medical history for context
+        medical_history = agent_container.db_accessor_agent.get_medical_history()
+        patient_data_context = f"Patient Data: {medical_history.get('medical_history', 'No data available')}"
 
-    interpretations = []
-    for image in images:
-        result = process_single_image(agent_container, image)
-        if "error" not in result:
-            interpretations.append(result["interpretation"])
-
-    if interpretations:
-        # Create message with all interpretations for medical assistant
-        combined_analysis = "\n\n".join(interpretations)
-        messages = [{
-            "role": "system",
-            "content": f"Image Analysis Results:\n{combined_analysis}\n\nConsider these findings in your assessment."
-        }]
-
-        # Get medical assistant's response
-        response = swarm.run(
-            agent=agent_container.medical_assistant_agent,
-            messages=messages,
-            stream=False,
-            debug=True
+        # Update agent instructions with patient data
+        agent_container.image_processing_agent.instructions = (
+            agent_container.image_processing_agent.instructions + "\n\n" + patient_data_context
         )
 
-        # Save and return visible messages
-        visible_messages = []
-        if response and response.messages:
-            for msg in response.messages:
-                if msg.get('role') != 'tool':
-                    # Save to database
-                    agent_container.db_accessor_agent.save_message(
-                        agent_container.user_context['session_id'],
-                        msg.get('role', 'assistant'),
-                        msg.get('content', ''),
-                        visible_to_user=True
-                    )
-                    if msg.get('content'):
-                        visible_messages.append({
-                            'role': msg.get('role', 'assistant'),
-                            'content': msg.get('content')
-                        })
+        # Save initial response
+        agent_container.db_accessor_agent.save_message(
+            agent_container.user_context['session_id'],
+            "assistant",
+            f"Processing {len(images)} images... Please wait.",
+            visible_to_user=True
+        )
 
-        return jsonify({'response': visible_messages}), 200
+        # Process unique images (avoid duplicates from different quality versions)
+        processed_images = set()
+        interpretations = []
 
-    return jsonify({'error': 'Failed to process images'}), 500
+        for image in images:
+            # Create a hash of the image data to identify duplicates
+            image_hash = hashlib.md5(image.encode()).hexdigest()
 
+            if image_hash not in processed_images:
+                processed_images.add(image_hash)
+                logger.info(f"Processing new unique image: {image_hash[:8]}")
+
+                result = process_single_image(agent_container, image)
+                if "error" not in result:
+                    interpretations.append(result["interpretation"])
+                    logger.info(f"Successfully processed image: {image_hash[:8]}")
+                else:
+                    logger.error(f"Failed to process image: {image_hash[:8]} error: {result['error']}")
+
+        if interpretations:
+            # Create message with all interpretations for medical assistant
+            combined_analysis = "\n\n".join(interpretations)
+
+            # Include patient context in the message
+            messages = [
+                {
+                    "role": "system",
+                    "content": f"{patient_data_context}\n\nИнтерпретация изображений от пользователя:\n{combined_analysis}\n\nЕсли информация релевантна, запиши ее"
+                }
+            ]
+
+            # Get medical assistant's response
+            response = swarm.run(
+                agent=agent_container.medical_assistant_agent,
+                messages=messages,
+                stream=False,
+                debug=True
+            )
+
+            # Save and return visible messages
+            visible_messages = []
+            if response and response.messages:
+                for msg in response.messages:
+                    if msg.get('role') != 'tool':
+                        # Save to database
+                        agent_container.db_accessor_agent.save_message(
+                            agent_container.user_context['session_id'],
+                            msg.get('role', 'assistant'),
+                            msg.get('content', ''),
+                            visible_to_user=True,
+                            message_metadata={
+                                'image_analysis': True,
+                                'timestamp': datetime.now(UTC).isoformat()
+                            }
+                        )
+                        if msg.get('content'):
+                            visible_messages.append({
+                                'role': msg.get('role', 'assistant'),
+                                'content': msg.get('content')
+                            })
+
+            logger.info(f"Successfully processed all images and generated response for user {external_user_id}")
+            return jsonify({
+                'response': visible_messages,
+                'processed_images_count': len(processed_images)
+            }), 200
+
+        return jsonify({'error': 'Failed to process images'}), 500
+
+    except Exception as e:
+        logger.error(f"Error in process_images: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/message', methods=['POST'])
 def handle_message():
@@ -175,10 +233,10 @@ def handle_message():
     agent_container = get_agent_container(external_user_id)
 
     try:
-        # First, save the user's message
+        # First save the user's message
         if isinstance(message, str):
             message = {"role": "user", "content": message}
-        
+
         # Save user message to DB
         agent_container.db_accessor_agent.save_message(
             agent_container.user_context['session_id'],
@@ -190,15 +248,14 @@ def handle_message():
             }
         )
 
-
         medical_history = agent_container.db_accessor_agent.get_medical_history()
 
         # Update agent instructions with patient data
         patient_data_context = f"Patient Data: {medical_history.get('medical_history', 'No data available')}"
-        
+
         agent_container.medical_assistant_agent.instructions = agent_container.medical_assistant_agent.instructions + "\n\n" + patient_data_context
         agent_container.doctor_agent.instructions = agent_container.doctor_agent.instructions + "\n\n" + patient_data_context
-        
+
         # Get recent message history including the just-saved message
         with agent_container.db_accessor_agent.db_manager.get_db_session() as session:
             recent_messages = session.query(Message).filter(
@@ -211,7 +268,7 @@ def handle_message():
                 Message.created_at.desc()
             ).limit(MESSAGE_BUFFER_SIZE).all()
 
-            # Convert to format for swarm, excluding tool messages
+            # Convert to format for swarm excluding tool messages
             messages = [
                 {"role": msg.role, "content": msg.content}
                 for msg in reversed(recent_messages)  # Reverse to get chronological order
@@ -234,7 +291,7 @@ def handle_message():
         visible_messages = []
         if response and response.messages:
             for msg in response.messages:
-                # Save ALL messages to DB, including tool messages
+                # Save ALL messages to DB including tool messages
                 visible_to_user = msg.get('role') != 'tool'
                 agent_container.db_accessor_agent.save_message(
                     agent_container.user_context['session_id'],
@@ -278,8 +335,7 @@ def handle_message():
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
         return jsonify({'error': str(e)}), 500
-    
-    
+
 @app.route('/initialize', methods=['POST'])
 def initialize_user():
     data = request.get_json()
@@ -314,7 +370,7 @@ def initialize_user():
     except Exception as e:
         logger.error(f"Error initializing user: {str(e)}", exc_info=True)  # Added exc_info for stack trace
         return jsonify({'error': str(e)}), 500
-    
+
 @app.route('/clear', methods=['POST'])
 def clear_user_data():
     """Clear all user data and start fresh"""

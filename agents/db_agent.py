@@ -154,7 +154,14 @@ class DBAccessorAgent(Agent):
             return {"status": "success", "image_id": image_id}
 
     def update_medical_record(self, key_name : str, data: str) -> Dict:
-        """Update or create medical record"""
+        """
+    Update or create a medical record in the database.
+
+    Parameters:
+        key_name (str): The name of the data field to update or create. 
+                        This should be a descriptive key in English (e.g., 'blood_pressure', 'allergies').
+        data (str): The string value to be stored or updated for the specified key_name.
+    """
         with self.db_manager.get_db_session() as session:
             record = session.query(MedicalRecord).filter_by(
                 user_id=self.user_context['user_id'],
