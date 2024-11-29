@@ -1,8 +1,9 @@
-Flask==2.2.5
-gunicorn==20.1.0
-openai==0.27.0
-swarm==1.0.0
-dataclasses==0.8
-python-telegram-bot==20.3
-requests==2.31.0
+Flask
+gunicorn
+openai
+swarm
+dataclasses
+python-telegram-bot
+requests
 sqlalchemy
+pillow
