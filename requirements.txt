@@ -1,7 +1,7 @@
 Flask
 gunicorn
 openai
-swarm
+git+ssh://git@github.com/openai/swarm.git
 dataclasses
 python-telegram-bot
 requests
