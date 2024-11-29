@@ -4,6 +4,7 @@ venv/
 env/
 .env/
 pythonenv*/
+agent_venv/
 agent_hippocrates/
 
 # Python cache files
