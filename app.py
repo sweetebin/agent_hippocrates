@@ -352,15 +352,6 @@ def initialize_user():
         agent_container = get_agent_container(external_user_id)
         logger.info("Got agent container")
 
-        logger.info("Saving initial greeting message")
-        agent_container.db_accessor_agent.save_message(
-            agent_container.user_context['session_id'],
-            "assistant",
-            "Greeting message",
-            visible_to_user=True
-        )
-        logger.info("Saved greeting message")
-
         return jsonify({
             'status': 'success',
             'message': f'Session initialized for user {external_user_id}',
