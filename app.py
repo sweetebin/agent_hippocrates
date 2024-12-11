@@ -1,3 +1,4 @@
+import traceback
 import requests
 from config import IMAGE_INTERPRETATOR_MODEL, IMAGE_INTERPRETATOR_PROMPT
 from db.models import Image, MedicalRecord, Message, Session, User
@@ -93,13 +94,21 @@ def process_single_image(image_data: str) -> str:
         )
 
         if response.status_code == 200:
-            return response.json()['choices'][0]['message']['content']
+            # Add debug logging
+            logger.debug(f"OpenRouter API response: {response.json()}")
+            try:
+                return response.json()['choices'][0]['message']['content']
+            except KeyError as ke:
+                logger.error(f"Unexpected response structure. Response: {response.json()}")
+                logger.error(f"KeyError: {ke}")
+                return None
         else:
             logger.error(f"OpenRouter API error: {response.text}")
             return None
 
     except Exception as e:
         logger.error(f"Error in image processing: {str(e)}")
+        logger.error(f"Full exception: {traceback.format_exc()}")
         return None
 
 @app.route('/process_images', methods=['POST'])
@@ -144,7 +153,7 @@ def process_images():
         response_message = {
             'role': 'assistant',
             'content': "Интерпретация изображения" +
-                      ("; ".join(interpretations) if interpretations
+                      ("".join(interpretations) if interpretations
                        else "В изображениях не обнаружено значимой медицинской информации.")
         }
 
