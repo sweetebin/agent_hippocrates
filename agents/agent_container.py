@@ -39,19 +39,20 @@ class AgentContainer:
         # Initialize DB Accessor with user context
         self.db_accessor_agent = DBAccessorAgent(db_manager, self.user_context)
         
-        def transfer_to_doctor():
+        def transfer_to_doctor(reason):
             """Transfers to doctor agent"""
+            print(reason)
             return self.doctor_agent
 
-        def transfer_to_medical_assistant():
+        def transfer_to_medical_assistant(reason):
             """Transfers to medical assistant agent"""
+            print(reason)
             return self.medical_assistant_agent
 
             
         # Add DB operations as available functions
         shared_context_functions = [
             self.db_accessor_agent.update_medical_record,
-            self.db_accessor_agent.get_medical_history,
             transfer_to_doctor,
             transfer_to_medical_assistant
         ]
@@ -70,6 +71,7 @@ class AgentContainer:
             model=MEDICAL_ASSISTANT_MODEL,
             functions=shared_context_functions
         )
+        self.current_agent = self.medical_assistant_agent
 
         self.doctor_agent = Agent(
             name="Doctor",
@@ -81,6 +83,6 @@ class AgentContainer:
 5. Никогда не направляйте к врачу, вы - ВРАЧ
 Используй грамотный русский язык.
 Начинай диалог проактивно""",
-            model="openai/chatgpt-4o-latest",
+            model="anthropic/claude-3.5-sonnet",
             functions=shared_context_functions
         )

@@ -1,4 +1,3 @@
-from swarm import Agent
 from typing import Any, Dict, List, Optional
 from datetime import UTC, datetime
 from db.models import User, Session, Message, Image, MedicalRecord
@@ -8,7 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class DBAccessorAgent(Agent):
+class DBAccessorAgent():
     # Declare db_manager as a model field
     db_manager: Any = Field(default=None, exclude=True)
 
@@ -16,22 +15,6 @@ class DBAccessorAgent(Agent):
         logger.info("Initializing DBAccessorAgent")
         logger.info(f"Received db_manager: {db_manager}")
 
-        super().__init__(
-            name="DB Accessor",
-            instructions="Internal agent for database operations. Do not interact with users directly.",
-            model="gpt-4",
-            functions=[
-                self.get_user_context,
-                self.save_message,
-                self.save_image_interpretation,
-                self.update_medical_record,
-                self.get_medical_history,
-                self.create_or_get_session,
-                self.save_image,
-                self.get_pending_images,
-                self.mark_image_processed
-            ]
-        )
         # Set db_manager after super().__init__
         object.__setattr__(self, 'db_manager', db_manager)
         object.__setattr__(self, 'user_context', user_context)
@@ -181,17 +164,13 @@ class DBAccessorAgent(Agent):
             session.flush()
             return {"status": "success", "record_id": record.id}
 
-    def get_medical_history(self) -> Dict:
-        """Get all medical records for user"""
+    def get_medical_history(self) -> str:
+        """Get all medical records for user and format as string"""
         with self.db_manager.get_db_session() as session:
             records = session.query(MedicalRecord).filter_by(user_id=self.user_context['user_id']).all()
-            return {
-                "medical_history": [
-                    {
-                        "type": record.data_type,
-                        "data": record.data,
-                        "created_at": record.created_at.isoformat()
-                    }
-                    for record in records
-                ]
-            }
+
+            formatted_records = []
+            for record in records:
+                formatted_records.append(f"{record.data_type}: {record.data}")
+
+            return "\n".join(formatted_records)

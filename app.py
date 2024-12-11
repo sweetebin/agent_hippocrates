@@ -79,18 +79,6 @@ def process_single_image(agent_container: AgentContainer, image_data: str) -> Di
                 "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}
             }]
         }]
-
-        # Get medical history for context
-        medical_history = agent_container.db_accessor_agent.get_medical_history()
-
-        # Add context message before image
-        context_message = {
-            "role": "system",
-            "content": f"Patient Data: {medical_history.get('medical_history', 'No data available')}\n\nPlease analyze the following medical image:"
-        }
-
-        image_message.insert(0, context_message)
-
         # Get image analysis
         logger.info("Sending image to processing agent")
         image_analysis = swarm.run(
@@ -133,7 +121,7 @@ def process_images():
 
         # Get medical history for context
         medical_history = agent_container.db_accessor_agent.get_medical_history()
-        patient_data_context = f"Patient Data: {medical_history.get('medical_history', 'No data available')}"
+        patient_data_context = f"Patient Data2: {medical_history}"
 
         # Update agent instructions with patient data
         agent_container.image_processing_agent.instructions = (
@@ -251,10 +239,10 @@ def handle_message():
         medical_history = agent_container.db_accessor_agent.get_medical_history()
 
         # Update agent instructions with patient data
-        patient_data_context = f"Patient Data: {medical_history.get('medical_history', 'No data available')}"
+        patient_data_context = f"Patient Data1: {medical_history}"
 
-        agent_container.medical_assistant_agent.instructions = agent_container.medical_assistant_agent.instructions + "\n\n" + patient_data_context
-        agent_container.doctor_agent.instructions = agent_container.doctor_agent.instructions + "\n\n" + patient_data_context
+        agent_container.medical_assistant_agent.instructions = agent_container.medical_assistant_agent.instructions + "\n" + patient_data_context
+    
 
         # Get recent message history including the just-saved message
         with agent_container.db_accessor_agent.db_manager.get_db_session() as session:
@@ -277,7 +265,7 @@ def handle_message():
         logger.debug(f"Sending messages to LLM: {messages}")  # Add logging
 
         # Get current agent
-        current_agent = agent_container.medical_assistant_agent
+        current_agent = agent_container.current_agent
 
         # Run conversation
         response = swarm.run(
@@ -312,12 +300,12 @@ def handle_message():
                     })
 
             # Handle agent handoff
-            if response.agent != current_agent:
+            if response and response.agent != current_agent:
                 handoff_message = {
                     'role': 'assistant',
                     'content': f"Transferring you to {response.agent.name}..."
                 }
-                visible_messages.append(handoff_message)
+                # Save handoff message
                 agent_container.db_accessor_agent.save_message(
                     agent_container.user_context['session_id'],
                     'assistant',
@@ -330,10 +318,14 @@ def handle_message():
                     }
                 )
 
+                # **Here's the crucial part: Update the agent in the container**
+                agent_container.current_agent = response.agent
+                visible_messages.append(handoff_message)
+
         return jsonify({'response': visible_messages}), 200
 
     except Exception as e:
-        logger.error(f"Error processing message: {str(e)}")
+        logger.error(f"Error processing message: {str(e.with_traceback)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/initialize', methods=['POST'])
