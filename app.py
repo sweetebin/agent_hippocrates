@@ -73,11 +73,11 @@ def process_single_image(image_data: str) -> str:
                 "Content-Type": "application/json"
             },
             json={
-                "model": {IMAGE_INTERPRETATOR_MODEL},
+                "model": IMAGE_INTERPRETATOR_MODEL,
                 "messages": [
                     {
                         "role": "system",
-                        "content": {IMAGE_INTERPRETATOR_PROMPT}
+                        "content": IMAGE_INTERPRETATOR_PROMPT
                     },
                     {
                         "role": "user",
@@ -143,8 +143,8 @@ def process_images():
         # Generate response
         response_message = {
             'role': 'assistant',
-            'content': "Интерпретация изображения \n" +
-                      ("Вот что я обнаружил: " + "; ".join(interpretations) if interpretations
+            'content': "Интерпретация изображения" +
+                      ("; ".join(interpretations) if interpretations
                        else "В изображениях не обнаружено значимой медицинской информации.")
         }
 
