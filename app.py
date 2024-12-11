@@ -56,6 +56,11 @@ def get_agent_container(external_user_id: str) -> AgentContainer:
             logger.error(f"Error in get_agent_container: {str(e)}")
             raise
 
+def get_patient_data_context(db_accessor_agent) -> str:
+    """Helper function to format patient data context"""
+    medical_history = db_accessor_agent.get_medical_history()
+    return f"Patient Data:\n{medical_history}"
+
 def process_single_image(agent_container: AgentContainer, image_data: str) -> Dict:
     """Process single image and save interpretation"""
     logger.info("Starting single image processing")
@@ -119,15 +124,6 @@ def process_images():
     try:
         agent_container = get_agent_container(external_user_id)
 
-        # Get medical history for context
-        medical_history = agent_container.db_accessor_agent.get_medical_history()
-        patient_data_context = f"Patient Data2: {medical_history}"
-
-        # Update agent instructions with patient data
-        agent_container.image_processing_agent.instructions = (
-            agent_container.image_processing_agent.instructions + "\n\n" + patient_data_context
-        )
-
         # Save initial response
         agent_container.db_accessor_agent.save_message(
             agent_container.user_context['session_id'],
@@ -159,7 +155,10 @@ def process_images():
             # Create message with all interpretations for medical assistant
             combined_analysis = "\n\n".join(interpretations)
 
-            # Include patient context in the message
+            # Get patient data context
+            patient_data_context = get_patient_data_context(agent_container.db_accessor_agent)
+
+            # Include patient context as system message
             messages = [
                 {
                     "role": "system",
@@ -236,14 +235,6 @@ def handle_message():
             }
         )
 
-        medical_history = agent_container.db_accessor_agent.get_medical_history()
-
-        # Update agent instructions with patient data
-        patient_data_context = f"Patient Data1: {medical_history}"
-
-        agent_container.medical_assistant_agent.instructions = agent_container.medical_assistant_agent.instructions + "\n" + patient_data_context
-    
-
         # Get recent message history including the just-saved message
         with agent_container.db_accessor_agent.db_manager.get_db_session() as session:
             recent_messages = session.query(Message).filter(
@@ -257,12 +248,16 @@ def handle_message():
             ).limit(MESSAGE_BUFFER_SIZE).all()
 
             # Convert to format for swarm excluding tool messages
-            messages = [
+            conversation_messages = [
                 {"role": msg.role, "content": msg.content}
                 for msg in reversed(recent_messages)  # Reverse to get chronological order
             ]
 
-        logger.debug(f"Sending messages to LLM: {messages}")  # Add logging
+        # Get patient data context and prepend as system message
+        patient_data_context = get_patient_data_context(agent_container.db_accessor_agent)
+        messages = [{"role": "system", "content": patient_data_context}] + conversation_messages
+
+        logger.debug(f"Sending messages to LLM: {messages}")
 
         # Get current agent
         current_agent = agent_container.current_agent
@@ -310,7 +305,7 @@ def handle_message():
                     agent_container.user_context['session_id'],
                     'assistant',
                     handoff_message['content'],
-                    visible_to_user=True,
+                    visible_to_user=False,
                     message_metadata={
                         'handoff_from': current_agent.name,
                         'handoff_to': response.agent.name,
@@ -318,7 +313,7 @@ def handle_message():
                     }
                 )
 
-                # **Here's the crucial part: Update the agent in the container**
+                # Update the agent in the container
                 agent_container.current_agent = response.agent
                 visible_messages.append(handoff_message)
 
