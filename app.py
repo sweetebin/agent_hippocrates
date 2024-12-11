@@ -1,4 +1,5 @@
 import requests
+from config import IMAGE_INTERPRETATOR_MODEL, IMAGE_INTERPRETATOR_PROMPT
 from db.models import Image, MedicalRecord, Message, Session, User
 from flask import Flask, request, jsonify
 from agents import AgentContainer
@@ -72,17 +73,11 @@ def process_single_image(image_data: str) -> str:
                 "Content-Type": "application/json"
             },
             json={
-                "model": "openai/chatgpt-4o-latest",
+                "model": {IMAGE_INTERPRETATOR_MODEL},
                 "messages": [
                     {
                         "role": "system",
-                        "content": """Проанализируйте это изображение на предмет медицинской значимости. Если найдете медицинскую информацию:
-
-Опишите то, что видите, используя медицинские термины
-Извлеките конкретные медицинские данные/измерения, если они присутствуют
-Отметьте любые видимые симптомы или состояния
-Если изображение не имеет медицинской ценности, просто укажите это.
-Будьте лаконичны и сосредоточьтесь только на медицински значимых деталях."""
+                        "content": {IMAGE_INTERPRETATOR_PROMPT}
                     },
                     {
                         "role": "user",
@@ -148,7 +143,7 @@ def process_images():
         # Generate response
         response_message = {
             'role': 'assistant',
-            'content': "Я проанализировал предоставленные изображения. " +
+            'content': "Интерпретация изображения \n" +
                       ("Вот что я обнаружил: " + "; ".join(interpretations) if interpretations
                        else "В изображениях не обнаружено значимой медицинской информации.")
         }
@@ -262,7 +257,7 @@ def handle_message():
             if response and response.agent != current_agent:
                 handoff_message = {
                     'role': 'assistant',
-                    'content': f"Transferring you to {response.agent.name}..."
+                    'content': f"Transferring you to {response.agent.name}"
                 }
                 # Save handoff message
                 agent_container.db_accessor_agent.save_message(
@@ -279,7 +274,6 @@ def handle_message():
 
                 # Update the agent in the container
                 agent_container.current_agent = response.agent
-                visible_messages.append(handoff_message)
 
         return jsonify({'response': visible_messages}), 200
 
