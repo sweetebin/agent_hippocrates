@@ -159,7 +159,7 @@ def process_images():
         # Generate response
         response_message = {
             'role': 'assistant',
-            'content': "Интерпретация изображения" +
+            'content': "Интерпретация изображения: " +
                       ("".join(interpretations) if interpretations
                        else "В изображениях не обнаружено значимой медицинской информации.")
         }
