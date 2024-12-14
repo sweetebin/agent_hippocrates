@@ -1,14 +1,5 @@
 #!/bin/bash
 
-# Install proxychains if not installed
-if ! command -v proxychains4 &> /dev/null; then
-    echo "Installing proxychains..."
-    sudo apt install -y proxychains4
-
-    # Configure proxychains
-    sudo bash -c 'echo "socks5 127.0.0.1 1080" >> /etc/proxychains4.conf'
-fi
-
 # Create and activate virtual environment
 echo "Creating virtual environment..."
 python3 -m venv venv
@@ -24,17 +15,19 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Run the telegram bot in the background with proxychains and save its PID
-echo "Starting Telegram bot with proxy..."
+# Run the telegram bot normally in the background
+echo "Starting Telegram bot..."
 python tg_bot/telegram_bot.py > telegram_bot.log 2>&1 &
 TG_BOT_PID=$!
 
 # Wait a few seconds to ensure the bot starts properly
 sleep 3
 
-# Run the main app with proxychains
+# Run the main app with proxy
 echo "Starting main application with proxy..."
-proxychains4 python app.py > app.log 2>&1
+export https_proxy="socks5://127.0.0.1:1080"
+export http_proxy="socks5://127.0.0.1:1080"
+python app.py > app.log 2>&1
 
 # If the main app exits, kill the telegram bot
 kill $TG_BOT_PID
