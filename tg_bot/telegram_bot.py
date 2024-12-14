@@ -9,6 +9,12 @@ import base64
 from io import BytesIO
 from PIL import Image
 
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
 SERVER_URL = os.environ.get('SERVER_URL', 'http://localhost:5000')
 
 class TelegramAgentBot:
