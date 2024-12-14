@@ -11,7 +11,7 @@ source venv/bin/activate
 
 # Install requirements
 echo "Installing main requirements..."
-pip install Flask gunicorn openai dataclasses python-telegram-bot requests sqlalchemy pillow httpx
+pip install Flask gunicorn openai dataclasses python-telegram-bot requests sqlalchemy pillow "httpx[socks]"
 
 # Run the telegram bot normally in the background
 echo "Starting Telegram bot..."

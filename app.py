@@ -82,45 +82,35 @@ def get_patient_data_context(db_accessor_agent) -> str:
     return f"Patient Data:\n{medical_history}"
 
 def process_single_image(image_data: str) -> str:
-    """Direct OpenRouter API call for image interpretation"""
+    """Process image using OpenAI client"""
     try:
-        response = requests.post(
-            os.environ.get("OPENROUTER_BASE_URL") + "/chat/completions",
-            headers={
-                "Authorization": f"Bearer {os.environ.get('OPENROUTER_API_KEY')}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": IMAGE_INTERPRETATOR_MODEL,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": IMAGE_INTERPRETATOR_PROMPT
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}
-                            }
-                        ]
-                    }
-                ]
-            }
+        response = client.chat.completions.create(
+            model=IMAGE_INTERPRETATOR_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": IMAGE_INTERPRETATOR_PROMPT
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}
+                        }
+                    ]
+                }
+            ]
         )
 
-        if response.status_code == 200:
-            # Add debug logging
-            logger.debug(f"OpenRouter API response: {response.json()}")
-            try:
-                return response.json()['choices'][0]['message']['content']
-            except KeyError as ke:
-                logger.error(f"Unexpected response structure. Response: {response.json()}")
-                logger.error(f"KeyError: {ke}")
-                return None
-        else:
-            logger.error(f"OpenRouter API error: {response.text}")
+        # Add debug logging
+        logger.debug(f"OpenRouter API response: {response}")
+
+        try:
+            return response.choices[0].message.content
+        except (AttributeError, IndexError) as e:
+            logger.error(f"Unexpected response structure. Response: {response}")
+            logger.error(f"Error: {e}")
             return None
 
     except Exception as e:
