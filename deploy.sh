@@ -26,7 +26,7 @@ fi
 
 # Run the telegram bot in the background with proxychains and save its PID
 echo "Starting Telegram bot with proxy..."
-proxychains4 python tg_bot/telegram_bot.py > telegram_bot.log 2>&1 &
+python tg_bot/telegram_bot.py > telegram_bot.log 2>&1 &
 TG_BOT_PID=$!
 
 # Wait a few seconds to ensure the bot starts properly
