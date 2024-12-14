@@ -39,13 +39,13 @@ agent_lock = threading.Lock()
 
 # Create HTTP client with proxy configuration
 http_client = httpx.Client(
-    proxies={
-        "http://": "socks5://127.0.0.1:1080",
-        "https://": "socks5://127.0.0.1:1080"
-    }
+    transport=httpx.HTTPTransport(
+        proxy=httpx.Proxy(
+            url="socks5://127.0.0.1:1080",
+        )
+    )
 )
 
-# Configure OpenAI with custom HTTP client
 client = OpenAI(
     base_url=os.environ.get("OPENROUTER_BASE_URL"),
     api_key=os.environ.get("OPENROUTER_API_KEY"),
