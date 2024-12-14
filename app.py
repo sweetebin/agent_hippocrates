@@ -14,12 +14,18 @@ import logging
 from typing import List, Dict
 import hashlib
 
+import logging
+
+# Configure logging once, at the module level
 logging.basicConfig(
-    level=logging.DEBUG,  # Set to DEBUG for more detailed logs
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('medical_app.log'),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
-
 app = Flask(__name__)
 
 # Initialize database manager
@@ -365,15 +371,5 @@ def clear_user_data():
 if __name__ == '__main__':
     # Ensure database tables are created
     db_manager.init_db()
-
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler('medical_app.log'),
-            logging.StreamHandler()
-        ]
-    )
 
     app.run(host='0.0.0.0', port=5000)
